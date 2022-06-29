@@ -9,13 +9,13 @@ import numpy as np
 import sys
 
 # Salea sampling frequency
-SAMPLING_FRREQUENCY = 625000
+SAMPLING_FRREQUENCY = 625_000
 
-# Number of samples taken during a ping
+# Number of samples taken during a 0.004s ping
 ping_samples = SAMPLING_FRREQUENCY * 0.004
 
 # Pinger (target) frequency
-PINGER_FREQUENCY = 40000
+PINGER_FREQUENCY = 40_000
 
 # Speed of sound in water in m/s
 SOUND_VELO = 1511.5
@@ -23,10 +23,9 @@ SOUND_VELO = 1511.5
 # Nipple distance between hydrophone
 HYDROPHONE_SPACING = 0.0115
 
-# Allowed phase difference (half wavelength) -- prevents aliasing
-# Michael's note: this is 1) unused in this script and 2) I think it should be:
-#phase_diff = np.pi 
-phase_diff = np.pi*2/(SOUND_VELO/PINGER_FREQUENCY)*HYDROPHONE_SPACING
+# Phase difference between hydrophones = 2pi * (HYDROPHONE_SPACING / wavelength)
+# Michael's note: this is unused in this script 
+phase_diff = np.pi*2 * HYDROPHONE_SPACING * PINGER_FREQUENCY / SOUND_VELO
 
 fft_w_size = 125
 
