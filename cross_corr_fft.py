@@ -9,10 +9,10 @@ import numpy as np
 import sys
 
 # Salea sampling frequency
-SAMPLING_FRREQUENCY = 625_000
+SAMPLING_FREQUENCY = 625_000
 
 # Number of samples taken during a 0.004s ping
-ping_samples = SAMPLING_FRREQUENCY * 0.004
+ping_samples = SAMPLING_FREQUENCY * 0.004
 
 # Pinger (target) frequency
 PINGER_FREQUENCY = 40_000
@@ -20,7 +20,7 @@ PINGER_FREQUENCY = 40_000
 # Speed of sound in water in m/s
 SOUND_VELO = 1511.5
 
-# Nipple distance between hydrophone
+# Nipple distance between hydrophones
 HYDROPHONE_SPACING = 0.0115
 
 # Phase difference between hydrophones = 2pi * (HYDROPHONE_SPACING / wavelength)
@@ -31,6 +31,7 @@ fft_w_size = 125
 
 check_len = 20
 
+# Number of chunks to split phase difference data into
 large_window_portion = 5
 
 guess = (0, 0, -10)
@@ -48,35 +49,50 @@ hydrophone_positions = [np.array([0, 0, 0]),
 #       np.array([-HYDROPHONE_SPACING/2, -np.sqrt(3)*HYDROPHONE_SPACING/4, -3*HYDROPHONE_SPACING/4])]
 
 
-
+# Returns average phase difference in window with least variance
+# Phase difference is measured between channels parr1 and parr2 
+# Only consideres data in parr1 and parr2 between indicies start and end
+# Window size is determined from large_window_portion
 def get_pdiff(parr1, parr2, start, end):
-    pdllist = np.subtract(parr2, parr1)
-    pdlist = correct_phase(pdllist[start:end])
-    var = variance_list(pdlist, int(len(pdlist)//large_window_portion))
-    # var = variance_list(pdlist, int(len(pdlist)/3))
-    phase_start = np.argmin(var)
-    # check if lowest variance align with max mag interval, if not then bad data
-    # print("phase start", phase_start+start)
-    # print("start", start)
-    # plt.figure()
-    # plt.plot(correct_phase(pdllist))
-    # plt.title("phase diff")
-    # plt.show()
-    # THIS REQUIREMENT CAN BE LOSEN IF TOO MANY PINGS ARE INVALID, YET MIGHT LEAD TO INACCURATE RESULT. Change 2 to 1.5.
-    if phase_start > len(pdlist)/2:
-        return None
-    phase_end = phase_start + int(len(pdlist)//large_window_portion)
-    return np.mean(pdlist[phase_start:phase_end])
 
+    #Phase difference between channels
+    phase_diff = np.subtract(parr2, parr1)
+
+    #Phase difference between channels within window and corrected for differences greater than a full period
+    phase_diff_corr = correct_phase(phase_diff[start:end])
+
+    # List of variances of phase differences within phase_diff_corr
+    # Each index in var represents the variance of the chunk starting at that index
+    # Chunk size is the second parameter of variance_list; the number of chunks is large_window_portion
+    # var is of length len(phase_diff_corr) - the size of the chunk 
+    var = variance_list(phase_diff_corr, int(len(phase_diff_corr)//large_window_portion))
+
+    # Index of minimum variance
+    phase_start = np.argmin(var)
+
+    # THIS REQUIREMENT CAN BE LOSEN IF TOO MANY PINGS ARE INVALID, YET MIGHT LEAD TO INACCURATE RESULT. Change 2 to 1.5.
+    # If the minimum variance is in the second half of the window return None
+    # Second half contains lots of noise from reflections, so it should not be used
+    if phase_start > len(phase_diff_corr)/2:
+        return None
+
+    # Mark end of phase difference window of least variance 
+    phase_end = phase_start + int(len(phase_diff_corr)//large_window_portion)
+
+    #Return average phase difference in window of least variance
+    return np.mean(phase_diff_corr[phase_start:phase_end])
+
+# Offsets phase difference by 2pi -- used in correct_phase
 def reduce_phase(phase):
     return -phase/abs(phase)*(2*np.pi-abs(phase))
 
+# If phase difference is greater than pi in either direction, correct it by offsetting by 2pi
 def correct_phase(arr):
     return [reduce_phase(phase) if abs(phase) > np.pi else phase for phase in arr]
 
-def fft_sw(xn, PINGER_FREQUENCY):
+def fft_sw(xn, freq):
     n = np.arange(len(xn))
-    exp = np.exp(-1j*PINGER_FREQUENCY/SAMPLING_FRREQUENCY*2*np.pi*n)
+    exp = np.exp(-1j*freq/SAMPLING_FREQUENCY*2*np.pi*n)
     return np.dot(xn, exp)
 
 def get_alist(a, n):
@@ -93,6 +109,7 @@ def fft(xn, PINGER_FREQUENCY, w_size):
         ft.append(fft_sw(xn_s, PINGER_FREQUENCY))
     return np.angle(ft), np.absolute(ft)
 
+# Returns a list of variances in arr of chunks of size window
 def variance_list(arr, window):
     return [np.var(arr[i:i+window]) for i in range(len(arr) - window + 1)]
 
@@ -196,10 +213,10 @@ def process_data(raw_data, if_double, actual, ccwha, downva, count):
             print("invalid\n")
     return actual, ccwha, downva, count
 
-
-def cross_corr_func(filename, if_double, version, if_plot, samp_f=SAMPLING_FRREQUENCY, tar_f=PINGER_FREQUENCY, guess_x=guess[0], guess_y=guess[1], guess_z=guess[2]):
-    global SAMPLING_FRREQUENCY, PINGER_FREQUENCY, guess
-    SAMPLING_FRREQUENCY = samp_f
+#Inputs file, signal parameters, and a guess and ouputs 
+def cross_corr_func(filename, if_double, version, if_plot, samp_f=SAMPLING_FREQUENCY, tar_f=PINGER_FREQUENCY, guess_x=guess[0], guess_y=guess[1], guess_z=guess[2]):
+    global SAMPLING_FREQUENCY, PINGER_FREQUENCY, guess
+    SAMPLING_FREQUENCY = samp_f
     PINGER_FREQUENCY = tar_f
     filepath = filename
     guess = (guess_x, guess_y, guess_z)
