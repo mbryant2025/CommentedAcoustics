@@ -51,9 +51,9 @@ hydrophone_positions = [np.array([0, 0, 0]),
 
 # Returns average phase difference in window with least variance
 # Phase difference is measured between channels parr1 and parr2 
-# Only consideres data in parr1 and parr2 between indicies start and end
+# Only considers data in parr1 and parr2 between indicies start and end
 # Window size is determined from large_window_portion
-def get_pdiff(parr1, parr2, start, end):
+def get_pdiff(parr1, parr2, start: int, end: int) -> float:
 
     #Phase difference between channels
     phase_diff = np.subtract(parr2, parr1)
@@ -83,7 +83,7 @@ def get_pdiff(parr1, parr2, start, end):
     return np.mean(phase_diff_corr[phase_start:phase_end])
 
 # Offsets phase difference by 2pi -- used in correct_phase
-def reduce_phase(phase):
+def reduce_phase(phase: float) -> float:
     return -phase/abs(phase)*(2*np.pi-abs(phase))
 
 # If phase difference is greater than pi in either direction, correct it by offsetting by 2pi
