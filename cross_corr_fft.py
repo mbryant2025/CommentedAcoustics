@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import sys
 
-# Salea sampling frequency
+# Saleae sampling frequency
 SAMPLING_FREQUENCY = 625_000
 
 # Number of samples taken during a 0.004s ping
