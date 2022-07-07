@@ -90,9 +90,19 @@ def reduce_phase(phase: float) -> float:
 def correct_phase(arr):
     return [reduce_phase(phase) if abs(phase) > np.pi else phase for phase in arr]
 
-def fft_sw(xn, freq):
-    n = np.arange(len(xn))
-    exp = np.exp(-1j*freq/SAMPLING_FREQUENCY*2*np.pi*n)
+#Calculates an individual summand for the FFT algorithm for a given window
+#PARAMS:
+#   xn: numpy array of data
+#   freq: frequency of pinger
+def fft_sw(xn, freq: float):
+
+    n = np.arange(len(xn)) #Behaves the same as the built-in range() function...except not a list but numpy array
+    
+    #Performs e^(-j*2*pi*freq*n/SAMPLING_FREQUENCY) on each element n
+    #Derived from FFT formula (discrete)
+    exp = np.exp(-1j*freq/SAMPLING_FREQUENCY*2*np.pi*n) 
+
+    #Final value is this complex-valued product, again due to FFT formula
     return np.dot(xn, exp)
 
 def get_alist(a, n):
@@ -102,11 +112,16 @@ def get_alist(a, n):
 def moving_average_max(a, n = int(ping_samples/fft_w_size)):
     return np.argmax(get_alist(a, n))
 
+#Performs FFT on data (xn)
 def fft(xn, PINGER_FREQUENCY, w_size):
     ft = []
-    for i in range(int(len(xn)//w_size)):
-        xn_s = xn[i*w_size:(i+1)*w_size]
-        ft.append(fft_sw(xn_s, PINGER_FREQUENCY))
+    #Iterate through through data by wundows of size w_size
+    for i in range(int(len(xn)//w_size)): 
+        xn_s = xn[i*w_size:(i+1)*w_size] #Slice of xn representing a window of data
+        ft.append(fft_sw(xn_s, PINGER_FREQUENCY)) #Calcute individual term of FFT for this window
+
+    #The first return value is a numpy array of the angles in the complex plane of the complex-valued elements of ft
+    #The second return value is a numpy array of the magnitudes of each element of ft
     return np.angle(ft), np.absolute(ft)
 
 # Returns a list of variances in arr of chunks of size window
@@ -129,19 +144,35 @@ def solver(guess, diff):
     data_val = (diff[0], diff[1], diff[2])
     return fsolve(system, guess, args=data_val)
 
+#Inputs a list of data from each channel at one point in time ???? not one point it seems
+#Returns a float of the phase differences between the channel (using get_pdiff and minimum variance) and the list of angles from FFT
 def data_to_pdiff(data):
+    #plist_all is a list of phases from FFT
+    #mlist_all is a list of magnitudes from FFT
+
+    #Get phases and magnitudes from FFT
+    #Unpacks in order to transpose them into lists of phases and magnitudes rather than phases and magnitudes by channel
     plist_all, mlist_all = zip(*[fft(d, PINGER_FREQUENCY, fft_w_size) for d in data])
+    
+    #Sum of magnitudes of all channels
+    #Sums over axis 0 such that mlist of of same length as mlist_all
+    #Each element in mlist is the sum of the list of magnitudes that index in mlist_all
     mlist = np.sum(mlist_all, axis=0)
+
+
     mag_start = moving_average_max(mlist)
     mag_end = mag_start + int(ping_samples//fft_w_size)
     return apply_to_pairs(lambda p1, p2: get_pdiff(p1, p2, mag_start, mag_end), plist_all)
 
-def read_data(filepath):
+#Returns a list of of data from each channel -- highest level list has length of number of channels (4)
+def read_data(filepath: str):
     df = pandas.read_csv(filepath, skiprows=[1], skipinitialspace=True)
     print("running ", filepath)
     return [df["Channel 0"].tolist(), df["Channel 1"].tolist(), df["Channel 2"].tolist(), df["Channel 3"].tolist()]
 
-def split_data(data):
+#Returns a list containing two sublists: the first is the first half of the data, the second is the second half
+#Ex. [data0, data1, data2, data3] -> [[data0, data1], [data2, data3]]
+def split_data(data: list) -> list:
     return [data[0:int(len(data)/2)], data[int(len(data)/2):len(data)]]
 
 def check_angle(hz, vt):
@@ -181,10 +212,21 @@ def final_hz_angle(hz_arr):
     ave = [q for q in quadrant if len(q) == max_len]
     return np.mean(ave)
 
-def process_data(raw_data, if_double, actual, ccwha, downva, count):
+#PARAMS:
+#   raw_data: list of lists of data from each channel
+#   target: boolean indicating if the data is duplicated and thus needs to be split
+def process_data(raw_data, if_double: bool, actual, ccwha, downva, count):
+
+    #Split data into two halves if necessary and sotre everything in a numpy array
+    #Ex. [ch0, ch1, ch2, ch3] -> [[ch0], [ch1a], [ch1b], [ch2], [ch3]]
     data = np.array([split_data(d) if if_double else [d] for d in raw_data])
 
+    #Parralel lists -> loop through each time step
     for j in range(len(data[0])):
+
+        #Finds phase difference of 
+        #The below numpy array slicing creates an array out of the jth index of each channel
+        #Ex. [[ch0], [ch1a], [ch1b], [ch2], [ch3]] -> [ch0[j], [ch1a[j], [ch1b[j], [ch2[j], [ch3[j]]
         pdiff = data_to_pdiff(data[:, j])
 
         if None not in pdiff:
@@ -227,7 +269,7 @@ def cross_corr_func(filename, if_double, version, if_plot, samp_f=SAMPLING_FREQU
     count = 0
 
     if version == 0:
-        raw_data = read_data(filepath)
+        raw_data = read_data(filepath) #[ch0, ch1, ch2, ch3]
         actual, ccwha, downva, count = process_data(raw_data, if_double, actual, ccwha, downva, count)
 
     for i in range(version):
